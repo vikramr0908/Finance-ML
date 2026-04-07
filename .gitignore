@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Model files (large binaries — regenerate with ar_ap_ml.py)
+models/
+
+# Generated CSVs (regenerate with ar_ap_ml.py)
+ar_ap_data.csv
+ar_ap_predictions.csv
+kpi_by_client.csv
+kpi_by_month.csv
+kpi_by_aging.csv
+kpi_by_resource.csv
+
+# Metrics output
+model_metrics.txt
+overall_kpis.json
