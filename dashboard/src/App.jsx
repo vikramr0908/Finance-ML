@@ -369,27 +369,27 @@ function ClientSection({ clients }) {
 
 // ─── SECTION 3: AGING ─────────────────────────────────────────
 
-function AgingSection() {
+function AgingSection({ aging }) {
   const agingColors  = [C.green, C.blue, C.amber, C.red]
   const agingColorsA = [C.greenA, C.blueA, C.amberA, C.redA]
 
   const outstandingConfig = useMemo(() => ({
     type:'bar',
-    data:{ labels:AGING.map(a=>a.bucket), datasets:[{ data:AGING.map(a=>a.outstanding), backgroundColor:agingColorsA, borderColor:agingColors, borderWidth:1.5, borderRadius:6 }] },
+    data:{ labels:aging.map(a=>a.bucket), datasets:[{ data:aging.map(a=>a.outstanding), backgroundColor:agingColorsA, borderColor:agingColors, borderWidth:1.5, borderRadius:6 }] },
     options:{ ...base, plugins:{ legend:{ display:false } }, scales:{ x:{ grid }, y:{ grid, ticks:{ callback: v => fmtINR(v) } } } },
-  }), [])
+  }), [aging])
 
   const disputeConfig = useMemo(() => ({
     type:'bar',
-    data:{ labels:AGING.map(a=>a.bucket), datasets:[{ data:AGING.map(a=>a.disputePct), backgroundColor:agingColorsA, borderColor:agingColors, borderWidth:1.5, borderRadius:6 }] },
+    data:{ labels:aging.map(a=>a.bucket), datasets:[{ data:aging.map(a=>a.disputePct), backgroundColor:agingColorsA, borderColor:agingColors, borderWidth:1.5, borderRadius:6 }] },
     options:{ ...base, plugins:{ legend:{ display:false } }, scales:{ x:{ grid }, y:{ grid, ticks:{ callback: v => v+'%' } } } },
-  }), [])
+  }), [aging])
 
   const probConfig = useMemo(() => ({
     type:'bar',
-    data:{ labels:AGING.map(a=>a.bucket), datasets:[{ data:AGING.map(a=>a.disputeProb), backgroundColor:agingColorsA, borderColor:agingColors, borderWidth:1.5, borderRadius:6 }] },
+    data:{ labels:aging.map(a=>a.bucket), datasets:[{ data:aging.map(a=>a.disputeProb), backgroundColor:agingColorsA, borderColor:agingColors, borderWidth:1.5, borderRadius:6 }] },
     options:{ ...base, plugins:{ legend:{ display:false } }, scales:{ x:{ grid }, y:{ grid, ticks:{ callback: v => v+'%' } } } },
-  }), [])
+  }), [aging])
 
   return (
     <section className="section fade-section" id="aging">
@@ -398,7 +398,7 @@ function AgingSection() {
       <div className="section-sub">Outstanding amounts, dispute rates, and dispute probability by aging bucket</div>
 
       <div className="kpi-grid four">
-        {AGING.map((a, i) => (
+        {aging.map((a, i) => (
           <KpiCard key={a.bucket} label={`Bucket ${a.bucket}`} value={`${a.invoices} inv`} sub={`${fmtINR(a.outstanding)} outstanding`} color={['green','blue','amber','red'][i]} />
         ))}
       </div>
@@ -428,7 +428,7 @@ function AgingSection() {
             </tr>
           </thead>
           <tbody>
-            {AGING.map((a, i) => (
+            {aging.map((a, i) => (
               <tr key={a.bucket}>
                 <td><Pill color={['green','blue','amber','red'][i]}>{a.bucket}</Pill></td>
                 <td>{a.invoices}</td>
@@ -449,20 +449,20 @@ function AgingSection() {
 
 // ─── SECTION 4: BY RESOURCE ───────────────────────────────────
 
-function ResourceSection() {
-  const labels = RESOURCES.map(r => r.name.split(' ')[0])
+function ResourceSection({ resources }) {
+  const labels = resources.map(r => r.name.split(' ')[0])
 
   const billingConfig = useMemo(() => ({
     type:'bar',
-    data:{ labels, datasets:[{ data:RESOURCES.map(r=>r.billingRate), backgroundColor:C.slateA, borderColor:C.slate, borderWidth:1.5, borderRadius:4 }] },
+    data:{ labels, datasets:[{ data:resources.map(r=>r.billingRate), backgroundColor:C.slateA, borderColor:C.slate, borderWidth:1.5, borderRadius:4 }] },
     options:{ ...base, plugins:{ legend:{ display:false } }, scales:{ x:{ grid }, y:{ grid, ticks:{ callback: v => '₹'+v.toLocaleString() } } } },
-  }), [])
+  }), [resources])
 
   const collConfig = useMemo(() => ({
     type:'bar',
-    data:{ labels, datasets:[{ data:RESOURCES.map(r=>r.collEff), backgroundColor:C.greenA, borderColor:C.green, borderWidth:1.5, borderRadius:4 }] },
+    data:{ labels, datasets:[{ data:resources.map(r=>r.collEff), backgroundColor:C.greenA, borderColor:C.green, borderWidth:1.5, borderRadius:4 }] },
     options:{ ...base, plugins:{ legend:{ display:false } }, scales:{ x:{ grid }, y:{ grid, min:94, ticks:{ callback: v => v+'%' } } } },
-  }), [])
+  }), [resources])
 
   return (
     <section className="section fade-section" id="resource">
@@ -493,7 +493,7 @@ function ResourceSection() {
             </tr>
           </thead>
           <tbody>
-            {RESOURCES.map(r => (
+            {resources.map(r => (
               <tr key={r.name}>
                 <td>{r.name}</td>
                 <td><Pill color="slate">{r.role}</Pill></td>
@@ -515,36 +515,26 @@ function ResourceSection() {
 
 // ─── SECTION 5: MODELS ────────────────────────────────────────
 
-const SCATTER_PTS = CLIENTS.flatMap(c =>
-  Array.from({ length: 8 }, () => ({
-    x: +(c.avgDays  + (Math.random() - .5) * 25).toFixed(1),
-    y: +(c.predDays + (Math.random() - .5) * 18).toFixed(1),
-  }))
-)
+function ModelsSection({ metrics }) {
+  const avgDays = metrics?.avg_days_to_payment || 60
+  const predDays = metrics?.predicted_avg_days || 60
+  const scatterPts = useMemo(() =>
+    Array.from({ length: 64 }, () => ({
+      x: +(avgDays  + (Math.random() - .5) * 40).toFixed(1),
+      y: +(predDays + (Math.random() - .5) * 30).toFixed(1),
+    }))
+  , [avgDays, predDays])
 
-function useMetrics() {
-  const [metrics, setMetrics] = useState(null)
-  useEffect(() => {
-    fetch('http://localhost:8001/metrics')
-      .then(r => r.json())
-      .then(setMetrics)
-      .catch(() => setMetrics(null))
-  }, [])
-  return metrics
-}
-
-function ModelsSection() {
-  const metrics = useMetrics()
   const scatterConfig = useMemo(() => ({
     type: 'scatter',
     data: {
       datasets: [
-        { label:'Invoice', data:SCATTER_PTS, backgroundColor:'rgba(26,95,168,0.35)', pointRadius:4 },
+        { label:'Invoice', data:scatterPts, backgroundColor:'rgba(26,95,168,0.35)', pointRadius:4 },
         { label:'Perfect fit', data:[{x:5,y:5},{x:120,y:120}], type:'line', borderColor:'rgba(10,124,89,0.5)', borderWidth:1.5, pointRadius:0, borderDash:[4,4], fill:false },
       ],
     },
     options: { ...base, plugins:{ legend:{ labels:{ boxWidth:10 } } }, scales:{ x:{ title:{ display:true, text:'Actual Days', color:'#7a7a72' }, grid }, y:{ title:{ display:true, text:'Predicted Days', color:'#7a7a72' }, grid } } },
-  }), [])
+  }), [scatterPts])
 
   const rfConfig = useMemo(() => ({
     type: 'bar',
@@ -617,9 +607,11 @@ function ModelsSection() {
 
 // ─── SECTION 6: SCORE INVOICE ─────────────────────────────────
 
-function ScoreSection() {
-  const [client,      setClient]      = useState('XYZ Corp')
-  const [resource,    setResource]    = useState('Vikram Singh')
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function ScoreSection({ clients, resources }) {
+  const [client,      setClient]      = useState(() => clients[0]?.name || '')
+  const [resource,    setResource]    = useState(() => resources[0]?.name || '')
   const [billingRate, setBillingRate] = useState(6500)
   const [workingDays, setWorkingDays] = useState(20)
   const [month,       setMonth]       = useState(4)
@@ -627,17 +619,13 @@ function ScoreSection() {
   const [loading,     setLoading]     = useState(false)
 
   const simulate = () => {
-    const cp = CLIENT_ML[client] || { avgDays:56, baseDispute:0.18 }
     const invAmount = billingRate * workingDays
-    let predDays = cp.avgDays + (billingRate - 5500) * 0.003 + (invAmount - 100000) * 0.00005
+    let predDays = 56 + (billingRate - 5500) * 0.003 + (invAmount - 100000) * 0.00005
     if (month >= 10 || month <= 2) predDays += 4
     predDays = Math.max(10, Math.round(predDays))
-
-    let dispProb = cp.baseDispute
+    let dispProb = 0.18
     if (invAmount > 120000) dispProb += 0.06
-    dispProb = Math.min(0.85, Math.max(0.03, dispProb))
-    dispProb = Math.round(dispProb * 100)
-
+    dispProb = Math.round(Math.min(0.85, Math.max(0.03, dispProb)) * 100)
     const bucket = predDays <= 30 ? '0-30' : predDays <= 60 ? '31-60' : predDays <= 90 ? '61-90' : '90+'
     return { predDays, dispProb, bucket, invAmount }
   }
@@ -646,9 +634,8 @@ function ScoreSection() {
     setLoading(true)
     setResults(null)
 
-    // Find client_risk from the CLIENTS data
-    const clientData = CLIENTS.find(c => c.name === client)
-    const client_risk = clientData ? clientData.risk : 'Medium'
+    const clientData = clients.find(c => c.name === client)
+    const client_risk = clientData?.risk || 'Medium'
 
     try {
       const res = await fetch('http://localhost:8001/predict', {
@@ -699,8 +686,8 @@ function ScoreSection() {
           <div className="form-group">
             <label className="form-label">Client</label>
             <select className="form-select" value={client} onChange={e => setClient(e.target.value)}>
-              {Object.entries(CLIENT_ML).map(([name]) => (
-                <option key={name} value={name}>{name}</option>
+              {clients.map(c => (
+                <option key={c.name} value={c.name}>{c.name}</option>
               ))}
             </select>
           </div>
@@ -708,7 +695,7 @@ function ScoreSection() {
           <div className="form-group">
             <label className="form-label">Resource</label>
             <select className="form-select" value={resource} onChange={e => setResource(e.target.value)}>
-              {RESOURCES.map(r => (
+              {resources.map(r => (
                 <option key={r.name} value={r.name}>{r.name} — {r.role}</option>
               ))}
             </select>
@@ -808,22 +795,23 @@ function ScoreSection() {
 
 // ─── FADE ANIMATION ───────────────────────────────────────────
 
-function useFadeUp() {
+function useFadeUp(ready) {
   useEffect(() => {
+    if (!ready) return
     const obs = new IntersectionObserver(
       entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') }),
       { threshold: 0.08 }
     )
     document.querySelectorAll('.fade-section').forEach(el => obs.observe(el))
     return () => obs.disconnect()
-  }, [])
+  }, [ready])
 }
 
 // ─── APP ──────────────────────────────────────────────────────
 
 export default function App() {
-  useFadeUp()
   const data = useAppData()
+  useFadeUp(!data.loading)
 
   if (data.loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontFamily:'DM Sans, sans-serif', color:'var(--ink3)' }}>
@@ -845,7 +833,7 @@ export default function App() {
         <div className="divider" />
         <ModelsSection metrics={data.metrics} />
         <div className="divider" />
-        <ScoreSection clients={data.clients} />
+        <ScoreSection clients={data.clients} resources={data.resources} />
         <footer className="footer">
           <div className="footer-left">AR/AP Intelligence Dashboard · Finance ML · FY 2024 Synthetic Demo</div>
           <div className="footer-right">React · Chart.js · scikit-learn</div>
