@@ -9,6 +9,10 @@ Usage:
 Required columns in input CSV:
     client, client_risk, resource, billing_rate, working_days, invoice_amount, invoice_date
 
+Optional (same names as training); if omitted, defaults are filled from client name:
+    contract_terms, relationship_age_months, payment_history_avg,
+    days_since_last_invoice, invoice_seq, reminder_sent
+
 Outputs three predictions per invoice:
     - predicted_days_to_payment   (Linear Regression)
     - dispute_probability         (Logistic Regression)
@@ -25,8 +29,49 @@ import numpy as np
 import pandas as pd
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-FEATURES  = ["client_enc", "resource_enc", "risk_enc",
-             "billing_rate", "working_days", "invoice_amount", "month_num"]
+
+# Must match FEATURES order in ar_ap_ml.py (trained models).
+FEATURES = [
+    "client_enc", "resource_enc", "risk_enc",
+    "billing_rate", "working_days", "invoice_amount", "month_num",
+    "contract_terms", "relationship_age_months", "payment_history_avg",
+    "days_since_last_invoice", "invoice_seq", "reminder_sent",
+]
+
+# Defaults aligned with synthetic client metadata in ar_ap_ml.py
+CONTRACT_TERMS = {
+    "Infosys BPO": 30, "Accenture India": 30, "Cognizant": 30,
+    "Wipro Digital": 45, "HCL Services": 45, "Capgemini": 60,
+    "TechSpark Ltd": 60, "XYZ Corp": 90,
+}
+RELATIONSHIP_AGE = {
+    "Infosys BPO": 36, "Accenture India": 48, "Cognizant": 24,
+    "Wipro Digital": 18, "HCL Services": 30, "Capgemini": 12,
+    "TechSpark Ltd": 6, "XYZ Corp": 3,
+}
+CLIENT_AVG_DAYS = {
+    "Infosys BPO": 45, "TechSpark Ltd": 82, "Accenture India": 32, "XYZ Corp": 95,
+    "Wipro Digital": 58, "HCL Services": 51, "Cognizant": 38, "Capgemini": 63,
+}
+
+
+def ensure_extra_features(df):
+    """Fill optional columns if missing so feature matrix matches training."""
+    df = df.copy()
+    if "contract_terms" not in df.columns:
+        df["contract_terms"] = df["client"].map(CONTRACT_TERMS).fillna(30)
+    if "relationship_age_months" not in df.columns:
+        df["relationship_age_months"] = df["client"].map(RELATIONSHIP_AGE).fillna(12)
+    if "payment_history_avg" not in df.columns:
+        df["payment_history_avg"] = df["client"].map(CLIENT_AVG_DAYS).fillna(50.0)
+    if "days_since_last_invoice" not in df.columns:
+        df["days_since_last_invoice"] = 30
+    if "invoice_seq" not in df.columns:
+        df["invoice_seq"] = 1
+    if "reminder_sent" not in df.columns:
+        df["reminder_sent"] = 0
+    return df
+
 
 def load_models():
     required = [
@@ -68,7 +113,7 @@ def encode_column(series, encoder, col_name):
 
 
 def predict(df, models):
-    df = df.copy()
+    df = ensure_extra_features(df)
 
     # Feature engineering
     df["client_enc"]   = encode_column(df["client"],      models["le_client"],   "client")

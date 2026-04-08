@@ -13,7 +13,7 @@ Outputs (under ./output/ next to this script):
   - model_metrics.txt     : accuracy / R2 / classification reports
   - overall_kpis.json     : rolled-up KPIs
 
-Trained models are saved under ./models/
+Trained models: ./models/
 """
 
 import numpy as np
@@ -38,7 +38,6 @@ from sklearn.metrics import (
 np.random.seed(42)
 random.seed(42)
 
-# All outputs live next to this script (portable across machines)
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(_BASE_DIR, "output")
 MODEL_DIR = os.path.join(_BASE_DIR, "models")
@@ -85,69 +84,135 @@ def compute_aging_bucket(days):
 
 def generate_dataset(n=500):
     rows = []
+
+    # Contract terms per client (Net 30 / 45 / 60 / 90)
+    contract_terms = {
+        "Infosys BPO":     30, "Accenture India": 30, "Cognizant":    30,
+        "Wipro Digital":   45, "HCL Services":    45, "Capgemini":    60,
+        "TechSpark Ltd":   60, "XYZ Corp":        90,
+    }
+
+    # Relationship age in months (how long client has been with us)
+    relationship_age = {
+        "Infosys BPO":     36, "Accenture India": 48, "Cognizant":    24,
+        "Wipro Digital":   18, "HCL Services":    30, "Capgemini":    12,
+        "TechSpark Ltd":    6, "XYZ Corp":         3,
+    }
+
+    # Track per-client state for payment history and invoice sequence
+    client_history = {c[0]: {"invoice_seq": 0, "payment_days_history": [], "last_invoice_date": None}
+                      for c in CLIENTS}
+
     for i in range(n):
         client_name, risk, avg_days = random.choice(CLIENTS)
         resource_name, role, base_rate = random.choice(RESOURCES)
 
-        # billing rate with some noise
-        billing_rate = base_rate + np.random.randint(-500, 800)
-        working_days = np.random.randint(15, 24)
+        billing_rate   = base_rate + np.random.randint(-500, 800)
+        working_days   = np.random.randint(15, 24)
         invoice_amount = billing_rate * working_days
 
         invoice_date = generate_invoice_date(2024)
-        due_date = invoice_date + timedelta(days=30)
+        terms        = contract_terms[client_name]
+        due_date     = invoice_date + timedelta(days=terms)
 
-        # days_to_payment driven by client risk + noise
-        noise = np.random.normal(0, 12)
-        days_to_payment = max(5, int(avg_days + noise))
+        # ── New feature: days since last invoice for this client
+        hist = client_history[client_name]
+        if hist["last_invoice_date"]:
+            days_since_last = max(0, (invoice_date - hist["last_invoice_date"]).days)
+        else:
+            days_since_last = 90  # first invoice — large gap
+        hist["last_invoice_date"] = invoice_date
+
+        # ── New feature: invoice sequence number for this client
+        hist["invoice_seq"] += 1
+        invoice_seq = hist["invoice_seq"]
+
+        # ── New feature: client payment history avg (rolling)
+        if hist["payment_days_history"]:
+            payment_history_avg = round(np.mean(hist["payment_days_history"]), 1)
+        else:
+            payment_history_avg = float(avg_days)  # no history → use client avg
+
+        # ── New feature: reminder sent (high risk clients more likely)
+        reminder_prob = 0.1
+        if risk == "High":   reminder_prob = 0.7
+        if risk == "Medium": reminder_prob = 0.4
+        reminder_sent = int(np.random.rand() < reminder_prob)
+
+        # ── days_to_payment now driven by more realistic factors
+        noise = np.random.normal(0, 8)  # tighter noise since we have more signal
+        days_to_payment = avg_days + noise
+        # Contract terms influence: longer terms → client pays later
+        days_to_payment += (terms - 30) * 0.4
+        # Payment history: if client has been paying late, likely to continue
+        if hist["payment_days_history"]:
+            days_to_payment += (payment_history_avg - avg_days) * 0.5
+        # Reminder sent: reduces days
+        if reminder_sent:
+            days_to_payment -= np.random.uniform(5, 15)
+        # Relationship age: longer relationship → more trust → faster payment
+        days_to_payment -= relationship_age[client_name] * 0.1
+        # Large invoice → slower payment
+        if invoice_amount > 120000:
+            days_to_payment += np.random.uniform(3, 10)
+        days_to_payment = max(5, int(days_to_payment))
+
+        # Update payment history
+        hist["payment_days_history"].append(days_to_payment)
 
         payment_date = invoice_date + timedelta(days=days_to_payment)
 
-        # dispute: higher for high-risk clients and large invoices
+        # dispute: higher for high-risk, large invoices, new clients
         dispute_prob = 0.05
-        if risk == "High":    dispute_prob += 0.25
-        if risk == "Medium":  dispute_prob += 0.10
+        if risk == "High":          dispute_prob += 0.25
+        if risk == "Medium":        dispute_prob += 0.10
         if invoice_amount > 120000: dispute_prob += 0.08
+        if invoice_seq <= 2:        dispute_prob += 0.05  # new clients dispute more
+        if reminder_sent:           dispute_prob += 0.05  # reminder → already problematic
         disputed = int(np.random.rand() < dispute_prob)
 
         # payment outcome
-        if disputed:
-            short_chance = 0.6
-        else:
-            short_chance = 0.15
+        short_chance = 0.6 if disputed else 0.15
         r = np.random.rand()
         if r < short_chance:
             amount_received = round(invoice_amount * np.random.uniform(0.75, 0.97), 2)
-            payment_status = "Short"
+            payment_status  = "Short"
         elif r < short_chance + 0.05:
             amount_received = round(invoice_amount * np.random.uniform(1.01, 1.05), 2)
-            payment_status = "Excess"
+            payment_status  = "Excess"
         else:
             amount_received = invoice_amount
-            payment_status = "Exact"
+            payment_status  = "Exact"
 
-        aging_bucket = compute_aging_bucket(days_to_payment)
+        aging_bucket         = compute_aging_bucket(days_to_payment)
         collection_efficiency = round((amount_received / invoice_amount) * 100, 2)
 
         rows.append({
-            "invoice_id":           f"INV-2024-{i+1:04d}",
-            "client":               client_name,
-            "client_risk":          risk,
-            "resource":             resource_name,
-            "role":                 role,
-            "billing_rate":         billing_rate,
-            "working_days":         working_days,
-            "invoice_amount":       invoice_amount,
-            "invoice_date":         invoice_date.strftime("%Y-%m-%d"),
-            "due_date":             due_date.strftime("%Y-%m-%d"),
-            "payment_date":         payment_date.strftime("%Y-%m-%d"),
-            "days_to_payment":      days_to_payment,
-            "amount_received":      amount_received,
-            "disputed":             disputed,
-            "payment_status":       payment_status,
-            "aging_bucket":         aging_bucket,
+            "invoice_id":            f"INV-2024-{i+1:04d}",
+            "client":                client_name,
+            "client_risk":           risk,
+            "resource":              resource_name,
+            "role":                  role,
+            "billing_rate":          billing_rate,
+            "working_days":          working_days,
+            "invoice_amount":        invoice_amount,
+            "invoice_date":          invoice_date.strftime("%Y-%m-%d"),
+            "due_date":              due_date.strftime("%Y-%m-%d"),
+            "payment_date":          payment_date.strftime("%Y-%m-%d"),
+            "days_to_payment":       days_to_payment,
+            "amount_received":       amount_received,
+            "disputed":              disputed,
+            "payment_status":        payment_status,
+            "aging_bucket":          aging_bucket,
             "collection_efficiency": collection_efficiency,
-            "month":                invoice_date.strftime("%Y-%m"),
+            "month":                 invoice_date.strftime("%Y-%m"),
+            # ── New features ──
+            "contract_terms":        terms,
+            "relationship_age_months": relationship_age[client_name],
+            "payment_history_avg":   payment_history_avg,
+            "days_since_last_invoice": days_since_last,
+            "invoice_seq":           invoice_seq,
+            "reminder_sent":         reminder_sent,
         })
 
     return pd.DataFrame(rows)
@@ -177,7 +242,9 @@ df["risk_enc"]     = le_risk.fit_transform(df["client_risk"])
 df["month_num"]    = pd.to_datetime(df["invoice_date"]).dt.month
 
 FEATURES = ["client_enc", "resource_enc", "risk_enc",
-            "billing_rate", "working_days", "invoice_amount", "month_num"]
+            "billing_rate", "working_days", "invoice_amount", "month_num",
+            "contract_terms", "relationship_age_months", "payment_history_avg",
+            "days_since_last_invoice", "invoice_seq", "reminder_sent"]
 
 metrics_lines = []
 
@@ -236,7 +303,7 @@ scaler2 = StandardScaler()
 X_train2_s = scaler2.fit_transform(X_train2)
 X_test2_s  = scaler2.transform(X_test2)
 
-logr = LogisticRegression(max_iter=500, random_state=42)
+logr = LogisticRegression(max_iter=500, random_state=42, class_weight='balanced')
 logr.fit(X_train2_s, y_train2)
 y_pred_log = logr.predict(X_test2_s)
 y_prob_log  = logr.predict_proba(X_test2_s)[:, 1]

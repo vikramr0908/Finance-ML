@@ -12,8 +12,21 @@ venv/
 # macOS
 .DS_Store
 
+# Frontend
+dashboard/node_modules/
+
 # Model files (large binaries — regenerate with ar_ap_ml.py)
 models/
 
 # Pipeline outputs (regenerate with ar_ap_ml.py)
 output/
+
+# Legacy: individual outputs if written at repo root
+ar_ap_data.csv
+ar_ap_predictions.csv
+kpi_by_client.csv
+kpi_by_month.csv
+kpi_by_aging.csv
+kpi_by_resource.csv
+model_metrics.txt
+overall_kpis.json
