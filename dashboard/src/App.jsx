@@ -3,7 +3,8 @@ import Chart from 'chart.js/auto'
 
 // ─── API BASE ─────────────────────────────────────────────────
 
-const API = 'http://localhost:8001'
+// Must match uvicorn port (see api.py). Backend serves KPI CSVs from ../output/
+const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
 // ─── CENTRAL DATA HOOK ────────────────────────────────────────
 
@@ -107,7 +108,7 @@ function KpiCard({ label, value, sub, color = 'green' }) {
   )
 }
 
-function ChartBox({ title, sub, tag, tagClass, children }) {
+function ChartBox({ title, sub, tag, tagClass, description, children }) {
   return (
     <div className="chart-box">
       <div className="chart-head">
@@ -117,6 +118,7 @@ function ChartBox({ title, sub, tag, tagClass, children }) {
         </div>
         {tag && <span className={`chart-tag ${tagClass}`}>{tag}</span>}
       </div>
+      {description && <p className="chart-desc">{description}</p>}
       {children}
     </div>
   )
@@ -214,8 +216,8 @@ function OverviewSection({ metrics, monthly, aging }) {
     <section className="section fade-section" id="overview">
       <div className="hero">
         <div className="hero-eyebrow">Finance · ML · AR/AP Intelligence</div>
-        <h1 className="hero-title">Predict. Prioritise.<br /><em>Collect faster.</em></h1>
-        <p className="hero-sub">Three ML models layered over your AR/AP flow — predicting payment timelines, dispute risk, and aging buckets on every open invoice.</p>
+        <h1 className="hero-title">Predict. Focus.<br /><em>Collect faster.</em></h1>
+        <p className="hero-sub">Three models estimate when payment will arrive, how likely a dispute is, and which aging group each invoice fits—so you can act earlier on cash and risk.</p>
         <div className="hero-meta">
           {[
             [m.total_invoices || '—', 'Invoices analysed'],
@@ -246,10 +248,20 @@ function OverviewSection({ metrics, monthly, aging }) {
       </div>
 
       <div className="chart-row two">
-        <ChartBox title="Monthly invoice volume" sub="Invoiced vs collected (₹L)">
+        <ChartBox
+          title="Monthly invoice volume"
+          sub="Invoiced vs collected (₹L)"
+          description="Month by month: how much was invoiced (blue) vs how much cash came in (green). Numbers are in ₹ lakhs so the chart stays easy to read. Wider gaps mean more billed than collected that month."
+        >
           <ChartCanvas config={monthlyConfig} height={240} />
         </ChartBox>
-        <ChartBox title="Aging bucket distribution" sub="Invoice count by bucket" tag="Random Forest" tagClass="tag-rf">
+        <ChartBox
+          title="Aging bucket distribution"
+          sub="Invoice count by bucket"
+          tag="Random Forest"
+          tagClass="tag-rf"
+          description="Splits all invoices by how fast they were paid: within 30 days, 31–60, 61–90, or over 90 days. Each slice is how many invoices are in that group—so you see how many paid fast vs slow."
+        >
           <ChartCanvas config={agingConfig} height={240} />
         </ChartBox>
       </div>
@@ -281,7 +293,7 @@ function ClientSection({ clients }) {
       datasets: [{ label:'Dispute %', data:clients.map(c=>c.disputePct), backgroundColor:clients.map(c=>c.disputePct>25?C.redA:c.disputePct>15?C.amberA:C.greenA), borderColor:clients.map(c=>c.disputePct>25?C.red:c.disputePct>15?C.amber:C.green), borderWidth:1.5, borderRadius:4 }],
     },
     options: { ...base, plugins:{ legend:{ display:false } }, scales:{ x:{ grid }, y:{ grid, ticks:{ callback: v => v+'%' } } } },
-  }), [])
+  }), [clients])
 
   const atRiskConfig = useMemo(() => ({
     type: 'bar',
@@ -290,7 +302,7 @@ function ClientSection({ clients }) {
       datasets: [{ label:'At-Risk', data:clients.map(c=>c.atRisk), backgroundColor:clients.map(c=>c.atRisk>40?C.redA:c.atRisk>15?C.amberA:C.greenA), borderColor:clients.map(c=>c.atRisk>40?C.red:c.atRisk>15?C.amber:C.green), borderWidth:1.5, borderRadius:4 }],
     },
     options: { ...base, plugins:{ legend:{ display:false } }, scales:{ x:{ grid }, y:{ grid } } },
-  }), [])
+  }), [clients])
 
   const collEffConfig = useMemo(() => ({
     type: 'bar',
@@ -299,7 +311,7 @@ function ClientSection({ clients }) {
       datasets: [{ label:'Coll. Eff %', data:clients.map(c=>c.collEff), backgroundColor:C.greenA, borderColor:C.green, borderWidth:1.5, borderRadius:4 }],
     },
     options: { ...base, plugins:{ legend:{ display:false } }, scales:{ x:{ grid }, y:{ grid, min:93, ticks:{ callback: v => v+'%' } } } },
-  }), [])
+  }), [clients])
 
   return (
     <section className="section fade-section" id="client">
@@ -308,19 +320,39 @@ function ClientSection({ clients }) {
       <div className="section-sub">KPIs, payment timelines, and ML predictions by client</div>
 
       <div className="chart-row two">
-        <ChartBox title="Actual vs predicted days to payment" sub="Actual (bar) vs LR predicted (line)" tag="Linear Regression" tagClass="tag-lr">
+        <ChartBox
+          title="Actual vs predicted days to payment"
+          sub="Actual (bar) vs LR predicted (line)"
+          tag="Linear Regression"
+          tagClass="tag-lr"
+          description="Per client: blue bars = typical days they took to pay; green line = what the model guessed for those days. When the line sits close to the bar, the guess was close on average."
+        >
           <ChartCanvas config={actualVsPredConfig} height={240} />
         </ChartBox>
-        <ChartBox title="Dispute rate by client" sub="% invoices disputed per client" tag="Logistic Regression" tagClass="tag-logr">
+        <ChartBox
+          title="Dispute rate by client"
+          sub="% invoices disputed per client"
+          tag="Logistic Regression"
+          tagClass="tag-logr"
+          description="Out of every 100 invoices for that client, how many actually ended in a dispute. A taller bar means a higher share of disputes for that account."
+        >
           <ChartCanvas config={disputeConfig} height={240} />
         </ChartBox>
       </div>
 
       <div className="chart-row two">
-        <ChartBox title="At-risk invoices by client" sub="Dispute prob >40% or aging 61+ days">
+        <ChartBox
+          title="At-risk invoices by client"
+          sub="Dispute prob >40% or aging 61+ days"
+          description="How many invoices need attention for that client: either high dispute risk (above 40%), or payment took 61+ days. Taller bar = more such invoices."
+        >
           <ChartCanvas config={atRiskConfig} height={200} />
         </ChartBox>
-        <ChartBox title="Collection efficiency by client" sub="Amount received vs invoiced">
+        <ChartBox
+          title="Collection efficiency by client"
+          sub="Amount received vs invoiced"
+          description="How much of each client’s billed money was actually collected, on average. Higher bars mean more of what you billed turned into cash."
+        >
           <ChartCanvas config={collEffConfig} height={200} />
         </ChartBox>
       </div>
@@ -404,13 +436,27 @@ function AgingSection({ aging }) {
       </div>
 
       <div className="chart-row three">
-        <ChartBox title="Outstanding by bucket" sub="₹ amount uncollected">
+        <ChartBox
+          title="Outstanding by bucket"
+          sub="₹ amount uncollected"
+          description="Money still not collected, grouped by how long payment took: quick (0–30 days) up to very slow (90+). Taller bars mean more unpaid money in that group."
+        >
           <ChartCanvas config={outstandingConfig} height={200} />
         </ChartBox>
-        <ChartBox title="Dispute rate by bucket" sub="% disputed per aging bucket">
+        <ChartBox
+          title="Dispute rate by bucket"
+          sub="% disputed per aging bucket"
+          description="For each group (fast pay through slow pay), what share of invoices had a dispute. Compare bars to see if disputes go up when payment is slower."
+        >
           <ChartCanvas config={disputeConfig} height={200} />
         </ChartBox>
-        <ChartBox title="Avg dispute probability" sub="Logistic model output per bucket" tag="Logistic" tagClass="tag-logr">
+        <ChartBox
+          title="Avg dispute probability"
+          sub="Logistic model output per bucket"
+          tag="Logistic"
+          tagClass="tag-logr"
+          description="Average dispute risk from 0 to 100% for invoices in each group (fast to slow pay). If bars rise toward the right, the model sees more dispute risk on slower payments."
+        >
           <ChartCanvas config={probConfig} height={200} />
         </ChartBox>
       </div>
@@ -471,10 +517,18 @@ function ResourceSection({ resources }) {
       <div className="section-sub">Billing rate, utilisation, and collection KPIs by resource and role</div>
 
       <div className="chart-row two">
-        <ChartBox title="Avg billing rate by resource" sub="₹ per day">
+        <ChartBox
+          title="Avg billing rate by resource"
+          sub="₹ per day"
+          description="Typical daily billing rate for each person on the chart. Compare who has higher vs lower rates."
+        >
           <ChartCanvas config={billingConfig} height={240} />
         </ChartBox>
-        <ChartBox title="Collection efficiency by resource" sub="Amount received vs invoiced %">
+        <ChartBox
+          title="Collection efficiency by resource"
+          sub="Amount received vs invoiced %"
+          description="How much of billed value was collected, on average, for that person’s invoices. Higher means more of the bill turned into cash."
+        >
           <ChartCanvas config={collConfig} height={240} />
         </ChartBox>
       </div>
@@ -594,10 +648,22 @@ function ModelsSection({ metrics }) {
       </div>
 
       <div className="chart-row two">
-        <ChartBox title="Actual vs predicted days — scatter" sub="Each point = one invoice · diagonal = perfect fit" tag="Linear Regression" tagClass="tag-lr">
+        <ChartBox
+          title="Actual vs predicted days — scatter"
+          sub="Each point = one invoice · diagonal = perfect fit"
+          tag="Linear Regression"
+          tagClass="tag-lr"
+          description="Each dot: left–right = how many days payment really took; up–down = what the model predicted. Near the dashed line = good match. Exact accuracy stats are in the model cards above."
+        >
           <ChartCanvas config={scatterConfig} height={280} />
         </ChartBox>
-        <ChartBox title="RF: correct vs misclassified per bucket" sub="Stacked by aging bucket" tag="Random Forest" tagClass="tag-rf">
+        <ChartBox
+          title="RF: correct vs misclassified per bucket"
+          sub="Stacked by aging bucket"
+          tag="Random Forest"
+          tagClass="tag-rf"
+          description="Green = aging group guessed right; red = wrong group. Shows where the model mixes up slow vs fast payments. Sample numbers for the picture—real accuracy is in the model cards above."
+        >
           <ChartCanvas config={rfConfig} height={280} />
         </ChartBox>
       </div>
@@ -638,7 +704,7 @@ function ScoreSection({ clients, resources }) {
     const client_risk = clientData?.risk || 'Medium'
 
     try {
-      const res = await fetch('http://localhost:8001/predict', {
+      const res = await fetch(`${API}/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ client, client_risk, resource, billing_rate: billingRate, working_days: workingDays, month_num: month }),

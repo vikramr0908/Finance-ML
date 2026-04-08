@@ -17,15 +17,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Resolve paths relative to this file — no hardcoding needed
-BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(BASE_DIR, "models")
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR  = os.path.join(BASE_DIR, "models")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 app = FastAPI(title="AR/AP ML API")
 
-# Allow requests from the React dev server
+# Allow requests from the React dev server (localhost and 127.0.0.1)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
@@ -161,14 +165,14 @@ def health():
 
 @app.get("/metrics")
 def metrics():
-    path = os.path.join(BASE_DIR, "overall_kpis.json")
+    path = os.path.join(OUTPUT_DIR, "overall_kpis.json")
     if not os.path.exists(path):
         raise HTTPException(404, "overall_kpis.json not found. Run ar_ap_ml.py first.")
     with open(path) as f:
         return json.load(f)
 
 def _csv(filename):
-    path = os.path.join(BASE_DIR, filename)
+    path = os.path.join(OUTPUT_DIR, filename)
     if not os.path.exists(path):
         raise HTTPException(404, f"{filename} not found. Run ar_ap_ml.py first.")
     return pd.read_csv(path).round(2).to_dict(orient="records")
