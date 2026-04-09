@@ -36,7 +36,6 @@ function useAppData() {
         collEff:     x.collection_efficiency,
         atRisk:      x.at_risk_invoices,
         outstanding: x.amount_outstanding,
-        disputeProb: x.avg_dispute_prob,
       })))
       setAging(a.map(x => ({
         bucket:      x.aging_bucket,
@@ -367,7 +366,7 @@ function ClientSection({ clients }) {
             <tr>
               <th>Client</th><th>Invoices</th><th>Invoiced</th><th>Coll. Eff %</th>
               <th>Actual Days</th><th>Predicted Days</th><th>Dispute %</th>
-              <th>Avg Dispute Prob</th><th>At-Risk</th><th>Outstanding</th>
+              <th>At-Risk</th><th>Outstanding</th>
             </tr>
           </thead>
           <tbody>
@@ -387,7 +386,6 @@ function ClientSection({ clients }) {
                 <td><Pill color={daysClr(c.avgDays)}>{c.avgDays}</Pill></td>
                 <td><span className="mono">{c.predDays}</span></td>
                 <td><Pill color={riskClr(c.disputePct)}>{c.disputePct}%</Pill></td>
-                <td><span className="mono">{c.disputeProb}%</span></td>
                 <td><Pill color={arClr(c.atRisk)}>{c.atRisk}</Pill></td>
                 <td>{fmtINR(c.outstanding)}</td>
               </tr>
@@ -615,7 +613,7 @@ function ModelsSection({ metrics }) {
     },
     {
       tag:'Logistic Regression', tagClass:'tag-logr', name:'Dispute Probability',
-      rows:[['Target','disputed (0/1)'],['Accuracy', logrAcc],['class_weight','balanced'],['Recall (Disputed)','improved'],['Train/Test','80% / 20%']],
+      rows:[['Target','disputed (0/1)'],['Accuracy', logrAcc],['class_weight','balanced'],['Train/Test','80% / 20%']],
       note:'class_weight=balanced fixed the zero-recall problem. Model now actively predicts disputed invoices instead of always predicting no dispute.',
     },
     {
